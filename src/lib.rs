@@ -1,4 +1,6 @@
 extern crate web_sys;
+extern crate js_sys;
+
 mod utils;
 
 use wasm_bindgen::prelude::*;
@@ -22,12 +24,34 @@ extern {
     fn alert(s: &str);
 }
 
+fn wrap_for_size(i: i32, size: u32) -> u32 {
+    let s = size as i32;
+    ((s + i) % s) as u32
+}
+
 #[wasm_bindgen]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cell {
     Dead = 0,
     Alive = 1,
+}
+
+impl Cell {
+    pub fn toggle(&mut self) {
+        *self = match self {
+            Cell::Dead => Cell::Alive,
+            Cell::Alive => Cell::Dead
+        }
+    }
+
+    pub fn rand_cell_value() -> Cell {
+        if js_sys::Math::random() < 0.5 {
+            Cell::Dead
+        } else {
+            Cell::Alive
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -40,8 +64,8 @@ pub struct Universe {
 #[wasm_bindgen]
 impl Universe {
     pub fn new() -> Self {
-        let width = 48;
-        let height = 48;
+        let width = 200;
+        let height = 100;
 
         log!("new universe {} x {}", width, height);
 
@@ -109,26 +133,6 @@ impl Universe {
         (row * self.width + col) as usize
     }
 
-    /*
-    fn live_neighbor_count(&self, row: u32, column: u32) -> u8 {
-        let mut count = 0;
-        for delta_row in [self.height - 1, 0, 1].iter().cloned() {
-            for delta_col in [self.width - 1, 0, 1].iter().cloned() { //why iter().cloned()?
-                if delta_row == 0 && delta_col == 0 {
-                    continue;
-                }
-
-                let neighbor_row = (row + delta_row) % self.height;
-                let neighbor_col = (column + delta_col) % self.width;
-                let idx = self.get_index(neighbor_row, neighbor_col);
-                count += self.cells[idx] as u8;
-            }
-        }
-        count
-    }
-    // */
-
-    //*
     fn live_neighbor_count(&self, row: u32, col: u32) -> u8 {
         let mut count: u8 = 0;
         for row_delta in [self.height - 1, 0, 1] {
@@ -146,7 +150,22 @@ impl Universe {
 
         count
     }
-    // */
+
+    pub fn toggle_cell(&mut self, row: u32, col: u32) {
+        let index = self.get_index(row, col);
+        self.cells[index].toggle();
+    }
+
+    pub fn inject_random_cells(&mut self, row: u16, col: u16, size: i32) {
+        for col_delta in -size..size {
+            let col_with_offset = wrap_for_size(col as i32 + col_delta, self.width);
+            for row_delta in -size..size {
+                let row_with_offset = wrap_for_size(row as i32 + row_delta, self.height);
+                let index = self.get_index(row_with_offset, col_with_offset);
+                self.cells[index] = Cell::rand_cell_value();
+            }
+        }
+    }
 }
 
 // Another Universe implementation without the wasm_bindgen annotation. This is because Rust-generated
@@ -165,7 +184,6 @@ impl Universe {
             self.cells[idx] = Cell::Alive;
         }
     }
-
 }
 
 impl Display for Universe {
